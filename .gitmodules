@@ -7,3 +7,7 @@
 [submodule "libdeflate"]
 	path = libdeflate
 	url = https://github.com/ebiggers/libdeflate
+[submodule "extern/pybind11"]
+	path = extern/pybind11
+	url = ../../pybind/pybind11
+	branch = stable
