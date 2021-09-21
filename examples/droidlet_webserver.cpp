@@ -36,8 +36,10 @@ namespace py = pybind11;
 
 // function to push name + numpy array to outbound queue
 
-
 // json streaming of data, directly from Python
+
+
+// does json encoding need it's own thread?
 
 
 static std::mutex outboundMutex;
@@ -57,6 +59,7 @@ thread_local std::unordered_set<uWS::WebSocket<true, true, PerSocketData> * > cl
 
 
 void web_server_func(const int port=8000,
+		     const std::string root=".",
 		     const uWS::CompressOptions compression=uWS::DISABLED,
 		     const uint32_t max_payload_length=16 * 1024 * 1024,
 		     const uint16_t idle_timeout=16,
@@ -96,7 +99,7 @@ void web_server_func(const int port=8000,
     });
 
 
-  AsyncFileStreamer asyncFileStreamer(".");
+  AsyncFileStreamer asyncFileStreamer(root);
   app.get("/*", [&asyncFileStreamer](auto *res, auto *req) {
     auto url = req->getUrl();
     if (url == "/") {
@@ -157,9 +160,9 @@ void web_server_func(const int port=8000,
   std::cout << "Server Stooped" << std::endl;
 }
 
-void server_start(int port) {
+void server_start(int port, std::string root) {
   exit_flag = false;
-  web_thread = new std::thread([port]{web_server_func(port);});
+  web_thread = new std::thread([port, root]{web_server_func(port, root);});
 
 }
 
@@ -186,7 +189,9 @@ std::string tryget(std::string /*name*/) {
 PYBIND11_MODULE(droidlet_webserver, m) {
   m.doc() = "droidlet web server";
 
-  m.def("start", &server_start, "starts the server", py::arg("port") = 8000);
+  m.def("start", &server_start, "starts the server",
+	py::arg("port") = 8000,
+	py::arg("root") = ".");
   m.def("stop", &server_stop, "stops the server");
   m.def("publish", &publish, "publish data to subscribers", py::arg("name"), py::arg("data"));
   m.def("tryget", &tryget, "get data from a given named channel", py::arg("name"));
