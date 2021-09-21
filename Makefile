@@ -1,7 +1,9 @@
-EXAMPLE_FILES := Broadcast HelloWorld ServerName EchoServer BroadcastingEchoServer UpgradeSync UpgradeAsync
-THREADED_EXAMPLE_FILES := HelloWorldThreaded EchoServerThreaded
+EXAMPLE_FILES := Broadcast
 override CXXFLAGS += -lpthread -Wpedantic -Wall -Wextra -Wsign-conversion -Wconversion -std=c++2a -Isrc -IuSockets/src
 override LDFLAGS += uSockets/*.o -lz
+
+PYFLAGS := $(shell python -m pybind11 --includes) -undefined dynamic_lookup
+PYEXT := $(shell python3-config --extension-suffix)
 
 DESTDIR ?=
 prefix ?= /usr/local
@@ -49,8 +51,12 @@ endif
 examples:
 	$(MAKE) -C uSockets; \
 	for FILE in $(EXAMPLE_FILES); do $(CXX) -flto -O3 $(CXXFLAGS) examples/$$FILE.cpp -o $$FILE $(LDFLAGS) & done; \
-	for FILE in $(THREADED_EXAMPLE_FILES); do $(CXX) -pthread -flto -O3 $(CXXFLAGS) examples/$$FILE.cpp -o $$FILE $(LDFLAGS) & done; \
 	wait
+
+.PHONY: pyserver
+pyserver:
+	$(MAKE) -C uSockets; \
+	$(CXX) -flto -O3 $(CXXFLAGS) -Wall -shared  -fPIC $(PYFLAGS) examples/droidlet_webserver.cpp -o droidlet_webserver$(PYEXT) $(LDFLAGS);
 
 .PHONY: capi
 capi:
@@ -64,8 +70,8 @@ install:
 
 all:
 	$(MAKE) examples
-	$(MAKE) -C fuzzing
-	$(MAKE) -C benchmarks
+#	$(MAKE) -C fuzzing
+#	$(MAKE) -C benchmarks
 clean:
 	rm -rf $(EXAMPLE_FILES) $(THREADED_EXAMPLE_FILES)
 	rm -rf fuzzing/*.o benchmarks/*.o
