@@ -14,7 +14,7 @@ struct AsyncFileStreamer {
         // todo: if the root folder changes, we want to reload the cache
         for(auto &p : std::filesystem::recursive_directory_iterator(root)) {
             std::string url = p.path().string().substr(root.length());
-	    std::cout << "Indexing " << url << std::endl;
+	    // std::cout << "Indexing " << url << std::endl;
             char *key = new char[url.length()];
             memcpy(key, url.data(), url.length());
             asyncFileReaders[std::string_view(key, url.length())] = new AsyncFileReader(p.path().string());
@@ -24,7 +24,7 @@ struct AsyncFileStreamer {
     bool findFile(std::string_view url) {
         auto it = asyncFileReaders.find(url);
         if (it == asyncFileReaders.end()) {
-            std::cout << "Could Did not find file: " << url << std::endl;
+            std::cout << "Did not find file: " << url << std::endl;
 	    return false;
 	} else {
 	  return true;

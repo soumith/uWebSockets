@@ -128,6 +128,8 @@ void web_server_func(const int port=8000,
   // TODO: switch to polling
   // run every 1ms
   us_timer_set(delayTimer, [](struct us_timer_t *t) {
+
+    // Exit logic
     if (exit_flag) {
       for ( auto it = clients.begin(); it != clients.end(); ++it ) {
 	auto client = *it;
@@ -136,6 +138,8 @@ void web_server_func(const int port=8000,
       us_listen_socket_close(1, globalListenSocket);
       us_timer_close(t);
     }
+
+    // push to clients
     std::lock_guard<std::mutex> lock(outboundMutex);
     if (!outbound.empty()) {
       std::pair<std::string, std::string> val = outbound.front();
@@ -143,7 +147,7 @@ void web_server_func(const int port=8000,
       // std::cout << std::get<0>(val) << " " << std::get<1>(val) << std::endl;
       for ( auto it = clients.begin(); it != clients.end(); ++it ) {
 	auto client = *it;
-	client->send(std::get<0>(val), uWS::OpCode::TEXT);
+	client->send(std::get<1>(val), uWS::OpCode::TEXT);
       }      
     }
 
@@ -163,10 +167,20 @@ void server_stop() {
   exit_flag = true;
 }
 
-void push_data(std::string name, void* data) {
-    std::pair<std::string, std::string> val = std::make_pair("foo", "bar");
-    std::lock_guard<std::mutex> lock(outboundMutex);
-    outbound.push(val);
+void publish(std::string name, std::string data) {
+  std::pair<std::string, std::string> val = std::make_pair(name, data);
+  std::lock_guard<std::mutex> lock(outboundMutex);
+  outbound.push(val);
+}
+
+std::string tryget(std::string /*name*/) {
+  std::lock_guard<std::mutex> lock(inboundMutex);
+  if (!inbound.empty()) {
+    std::pair<std::string, std::string> val = inbound.front();
+    inbound.pop();
+    return std::get<1>(val);
+  }
+  return "";
 }
 
 PYBIND11_MODULE(droidlet_webserver, m) {
@@ -174,4 +188,6 @@ PYBIND11_MODULE(droidlet_webserver, m) {
 
   m.def("start", &server_start, "starts the server", py::arg("port") = 8000);
   m.def("stop", &server_stop, "stops the server");
+  m.def("publish", &publish, "publish data to subscribers", py::arg("name"), py::arg("data"));
+  m.def("tryget", &tryget, "get data from a given named channel", py::arg("name"));
 }
