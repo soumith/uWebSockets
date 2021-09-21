@@ -46,7 +46,7 @@ struct AsyncFileStreamer {
     static void streamFile(uWS::HttpResponse<SSL> *res, AsyncFileReader *asyncFileReader) {
         /* Peek from cache */
         std::string_view chunk = asyncFileReader->peek(res->getWriteOffset());
-        if (!chunk.length() || res->tryEnd(chunk, asyncFileReader->getFileSize()).first) {
+        if (!chunk.length() || res->tryEnd(chunk, (uintmax_t) asyncFileReader->getFileSize()).first) {
             /* Request new chunk */
             // todo: we need to abort this callback if peer closed!
             // this also means Loop::defer needs to support aborting (functions should embedd an atomic boolean abort or something)
@@ -58,7 +58,7 @@ struct AsyncFileStreamer {
 
             // us_socket_up_ref eftersom vi delar ägandeskapet
 
-            if (chunk.length() < asyncFileReader->getFileSize()) {
+	  if ((int64_t) chunk.length() < asyncFileReader->getFileSize()) {
                 asyncFileReader->request(res->getWriteOffset(), [res, asyncFileReader](std::string_view chunk) {
                     // check if we were closed in the mean time
                     //if (us_socket_is_closed()) {
@@ -77,7 +77,7 @@ struct AsyncFileStreamer {
             }
         } else {
             /* We failed writing everything, so let's continue when we can */
-            res->onWritable([res, asyncFileReader](int offset) {
+            res->onWritable([res, asyncFileReader](int /*offset*/) {
 
                 // här kan skiten avbrytas!
 

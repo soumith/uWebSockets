@@ -12,13 +12,13 @@ struct AsyncFileReader {
 private:
     /* The cache we have in memory for this file */
     std::string cache;
-    int cacheOffset;
+    uint64_t cacheOffset;
     bool hasCache;
 
     /* The pending async file read (yes we only support one pending read) */
     std::function<void(std::string_view)> pendingReadCb;
 
-    int fileSize;
+    int64_t fileSize;
     std::string fileName;
     std::ifstream fin;
     uWS::Loop *loop;
@@ -39,7 +39,7 @@ public:
 
         //std::cout << "Caching 1 MB at offset = " << 0 << std::endl;
         fin.seekg(0, fin.beg);
-        fin.read(cache.data(), cache.length());
+        fin.read(cache.data(), (long) cache.length());
         cacheOffset = 0;
         hasCache = true;
 
@@ -49,7 +49,7 @@ public:
     }
 
     /* Returns any data already cached for this offset */
-    std::string_view peek(int offset) {
+    std::string_view peek(unsigned long offset) {
         /* Did we hit the cache? */
         if (hasCache && offset >= cacheOffset && ((offset - cacheOffset) < cache.length())) {
             /* Cache hit */
@@ -59,7 +59,7 @@ public:
                 std::cout << "LESS THAN WHAT WE HAVE!" << std::endl;
             }*/
 
-            int chunkSize = std::min<int>(fileSize - offset, cache.length() - offset + cacheOffset);
+	  uint64_t chunkSize = std::min<uint64_t>((uint64_t)fileSize - offset, cache.length() - offset + cacheOffset);
 
             return std::string_view(cache.data() + offset - cacheOffset, chunkSize);
         } else {
@@ -70,7 +70,7 @@ public:
     }
 
     /* Asynchronously request more data at offset */
-    void request(int offset, std::function<void(std::string_view)> cb) {
+    void request(uint64_t offset, std::function<void(std::string_view)> cb) {
 
         // in this case, what do we do?
         // we need to queue up this chunk request and callback!
@@ -84,7 +84,7 @@ public:
         // disable cache
         hasCache = false;
 
-        std::async(std::launch::async, [this, cb, offset]() {
+        auto _ = std::async(std::launch::async, [this, cb, offset]() {
             //std::cout << "ASYNC Caching 1 MB at offset = " << offset << std::endl;
 
 
@@ -95,14 +95,14 @@ public:
                 //std::cout << "Reopening fin!" << std::endl;
                 fin.open(fileName, std::ios::binary);
             }
-            fin.seekg(offset, fin.beg);
-            fin.read(cache.data(), cache.length());
+            fin.seekg((int64_t) offset, fin.beg);
+            fin.read(cache.data(), (int64_t) cache.length());
 
             cacheOffset = offset;
 
             loop->defer([this, cb, offset]() {
 
-                int chunkSize = std::min<int>(cache.length(), fileSize - offset);
+	        uint64_t chunkSize = std::min<uint64_t>(cache.length(), (uint64_t)fileSize - offset);
 
                 // båda dessa sker, wtf?
                 if (chunkSize == 0) {
@@ -124,7 +124,7 @@ public:
 
     }
 
-    int getFileSize() {
+    int64_t getFileSize() {
         return fileSize;
     }
 };
