@@ -9,10 +9,15 @@
 #include <unordered_set>
 #include <atomic>
 
+#include "pybind11_json/pybind11_json.hpp"
+#include "nlohmann/json.hpp"
+using json =  nlohmann::json;
+namespace nl = nlohmann;
+
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
 
-/* Helpers for this example */
+/* Helpers for HTTP file serving */
 #include "helpers/AsyncFileReader.h"
 #include "helpers/AsyncFileStreamer.h"
 #include "helpers/Middleware.h"
@@ -31,21 +36,28 @@ namespace py = pybind11;
 // write a server stop and pybind it.......DONE
 
 
-// function to push json onto outbound queue
-// function to get json from inbound queue
+// function to push json onto outbound queue...DONE
+// function to get json from inbound queue...DONE
+// json streaming of data, directly from Python...DONE
 
-// function to push name + numpy array to outbound queue
 
-// json streaming of data, directly from Python
+// current bottleneck in the current dashboard is the to_struct for rgb/depth:
+// send a numpy array. that numpy array gets encoded into WEBP in a separate thread,
+// and then it gets pushed onto the websocket queue
+// what if the numpy array is part of a more complex struct? the json parser is going to flunk
+
+// open3d visualizer, directly, streaming data. how??
+
 
 
 // does json encoding need it's own thread?
+// function to push name + numpy array to outbound queue
 
 
 static std::mutex outboundMutex;
-static std::queue<std::pair<std::string, std::string> > outbound;
+static std::queue<std::pair<std::string, nl::json> > outbound;
 static std::mutex inboundMutex;
-static std::queue<std::pair<std::string, std::string> > inbound;
+static std::queue<std::pair<std::string, nl::json> > inbound;
 static std::thread *web_thread;
 static std::atomic<bool> exit_flag(false);
 
@@ -89,8 +101,16 @@ void web_server_func(const int port=8000,
 	clients.insert(ws);
       },
       .message = [](auto */*ws*/, std::string_view message, uWS::OpCode /*opCode*/) {
-	std::lock_guard<std::mutex> lock(inboundMutex);
-	inbound.push(std::make_pair("foo", std::string(message)));
+	try {
+	  auto j = json::parse(message);
+	  json::iterator it = j.begin();
+	  auto tup = std::make_pair(it.key(), it.value());
+	
+	  std::lock_guard<std::mutex> lock(inboundMutex);
+	  inbound.push(tup);
+	} catch (const nlohmann::detail::parse_error &e) {
+	  std::cerr << "Received malformed websocket message: " << e.what() << std::endl;
+	}	
       },
       .close = [](auto *ws, int /*code*/, std::string_view /*message*/) {
 	std::cout << "Removed client " << ws << std::endl;
@@ -143,14 +163,19 @@ void web_server_func(const int port=8000,
     }
 
     // push to clients
-    std::lock_guard<std::mutex> lock(outboundMutex);
+    std::unique_lock<decltype(outboundMutex)> guard(outboundMutex);
+    // std::lock_guard<std::mutex> lock(outboundMutex);
     if (!outbound.empty()) {
-      std::pair<std::string, std::string> val = outbound.front();
+      std::pair<std::string, nl::json> val = outbound.front();
       outbound.pop();
+      guard.unlock();
       // std::cout << std::get<0>(val) << " " << std::get<1>(val) << std::endl;
       for ( auto it = clients.begin(); it != clients.end(); ++it ) {
 	auto client = *it;
-	client->send(std::get<1>(val), uWS::OpCode::TEXT);
+
+	json j;
+	j[std::get<0>(val)] = std::get<1>(val);
+	client->send(j.dump(), uWS::OpCode::TEXT);
       }      
     }
 
@@ -170,20 +195,20 @@ void server_stop() {
   exit_flag = true;
 }
 
-void publish(std::string name, std::string data) {
-  std::pair<std::string, std::string> val = std::make_pair(name, data);
+void publish(const std::string &name, const nl::json &data) {
+  std::pair<std::string, nl::json> val = std::make_pair(name, data);
   std::lock_guard<std::mutex> lock(outboundMutex);
   outbound.push(val);
 }
 
-std::string tryget(std::string /*name*/) {
+nl::json tryget(std::string /*name*/) {
   std::lock_guard<std::mutex> lock(inboundMutex);
   if (!inbound.empty()) {
-    std::pair<std::string, std::string> val = inbound.front();
+    std::pair<std::string, nl::json> val = inbound.front();
     inbound.pop();
     return std::get<1>(val);
   }
-  return "";
+  return nl::json();
 }
 
 PYBIND11_MODULE(droidlet_webserver, m) {

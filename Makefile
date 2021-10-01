@@ -1,5 +1,5 @@
 EXAMPLE_FILES := Broadcast
-override CXXFLAGS += -lpthread -Wpedantic -Wall -Wextra -Wsign-conversion -Wconversion -std=c++2a -Isrc -IuSockets/src
+override CXXFLAGS += -lpthread -Wpedantic -Wall -Wextra -Wsign-conversion -Wconversion -std=c++2a -Isrc -IuSockets/src -Iextern/json/single_include/ -Iextern/pybind11_json/include/
 override LDFLAGS += uSockets/*.o -lz
 
 PYFLAGS := $(shell python -m pybind11 --includes) -undefined dynamic_lookup
